@@ -139,6 +139,7 @@ export function AdminPage() {
     state,
     getAssetById,
     isAuthenticated,
+    authLoading,
     adminEmail,
     loginAdmin,
     logoutAdmin,
@@ -161,7 +162,7 @@ export function AdminPage() {
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
 
-  // Auth form state
+  // Auth form state (Supabase Authentication)
   const [email, setEmail] = useState('eletuabibat12@gmail.com');
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState<string | null>(null);
@@ -411,8 +412,21 @@ export function AdminPage() {
     try {
       const url = id === 'dashboard' ? '/admin' : `/admin?section=${id}`;
       window.history.replaceState(null, '', url);
-    } catch {}
+    } catch { }
   };
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-[#0C0C0C] text-[#F5F0E8] flex items-center justify-center px-5 py-16">
+        <div className="w-full max-w-md border border-white/15 bg-[#121212] p-8 sm:p-10 space-y-4 text-center">
+          <p className="font-serif text-2xl tracking-[0.14em] uppercase text-[#F5F0E8]">ABIBAT</p>
+          <p className="text-[10px] tracking-[0.22em] uppercase text-[#F5F0E8]/50 animate-pulse">
+            Verifying Admin Authorization...
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (!isAuthenticated) {
     return (
@@ -425,8 +439,8 @@ export function AdminPage() {
             </div>
             <h1 className="font-serif text-3xl font-light uppercase">ADMIN SIGN IN</h1>
             <p className="text-xs text-[#F5F0E8]/65">
-              Private dashboard to manage pages, Cloudinary media, hero slideshows, portfolio
-              projects, digitals, experience, representation, and inquiries.
+              Sign in with your authorized Supabase administrator credentials to manage portfolio
+              projects, media assets, page content, and inquiries.
             </p>
           </div>
 
@@ -446,21 +460,22 @@ export function AdminPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="mt-1.5 w-full border border-white/20 bg-[#0C0C0C] px-3.5 py-2.5 text-xs text-[#F5F0E8] focus:border-white focus:outline-none"
+                placeholder="eletuabibat12@gmail.com"
+                className="mt-1.5 w-full border border-white/20 bg-[#0C0C0C] px-3.5 py-2.5 text-xs text-[#F5F0E8] focus:border-white focus:outline-none placeholder:text-[#F5F0E8]/30"
               />
             </label>
 
             <label className="block">
               <span className="text-[10px] tracking-[0.2em] uppercase text-[#F5F0E8]/65">
-                Password / Studio Passcode
+                Password
               </span>
               <input
                 type="password"
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter studio passcode"
-                className="mt-1.5 w-full border border-white/20 bg-[#0C0C0C] px-3.5 py-2.5 text-xs text-[#F5F0E8] focus:border-white focus:outline-none"
+                placeholder="••••••••"
+                className="mt-1.5 w-full border border-white/20 bg-[#0C0C0C] px-3.5 py-2.5 text-xs text-[#F5F0E8] focus:border-white focus:outline-none placeholder:text-[#F5F0E8]/30"
               />
             </label>
 
@@ -469,15 +484,12 @@ export function AdminPage() {
               disabled={loggingIn}
               className="w-full bg-[#E3D3C4] py-3 text-[10px] font-medium tracking-[0.24em] uppercase text-[#141414] hover:bg-white transition-colors disabled:opacity-50"
             >
-              {loggingIn ? 'SIGNING IN...' : 'ENTER STUDIO'}
+              {loggingIn ? 'VERIFYING CREDENTIALS...' : 'SIGN IN WITH SUPABASE'}
             </button>
           </form>
 
           <div className="border-t border-white/10 pt-4 text-[11px] text-[#F5F0E8]/55 space-y-1">
-            <p>
-              Default local studio passcode:{' '}
-              <code className="text-[#F5F0E8]/85">abibat-studio-2026</code>
-            </p>
+            <p>Protected by Supabase Authentication &amp; Row Level Security.</p>
             <Link
               to="/"
               className="inline-flex items-center gap-2 pt-2 text-[10px] tracking-[0.2em] uppercase text-[#F5F0E8]/75 hover:text-white"
@@ -499,25 +511,22 @@ export function AdminPage() {
         key={item.id}
         type="button"
         onClick={() => navigateTo(item.id)}
-        className={`w-full flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-md text-left text-[13px] transition-colors ${
-          isActive
-            ? 'bg-[#E3D3C4] text-[#141414] font-medium'
-            : 'text-[#F5F0E8]/78 hover:text-[#F5F0E8] hover:bg-white/[0.06]'
-        }`}
+        className={`w-full flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-md text-left text-[13px] transition-colors ${isActive
+          ? 'bg-[#E3D3C4] text-[#141414] font-medium'
+          : 'text-[#F5F0E8]/78 hover:text-[#F5F0E8] hover:bg-white/[0.06]'
+          }`}
       >
         <span className="flex items-center gap-3 min-w-0">
           <Icon
-            className={`h-4 w-4 shrink-0 ${
-              isActive ? 'text-[#141414]' : 'text-[#F5F0E8]/60'
-            }`}
+            className={`h-4 w-4 shrink-0 ${isActive ? 'text-[#141414]' : 'text-[#F5F0E8]/60'
+              }`}
           />
           <span className="truncate">{item.label}</span>
         </span>
         {typeof item.badge === 'number' && item.badge > 0 && (
           <span
-            className={`px-1.5 py-0.5 text-[10px] font-mono tabular-nums rounded ${
-              isActive ? 'bg-[#141414] text-[#F5F0E8]' : 'bg-white/15 text-[#F5F0E8]'
-            }`}
+            className={`px-1.5 py-0.5 text-[10px] font-mono tabular-nums rounded ${isActive ? 'bg-[#141414] text-[#F5F0E8]' : 'bg-white/15 text-[#F5F0E8]'
+              }`}
           >
             {item.badge}
           </span>

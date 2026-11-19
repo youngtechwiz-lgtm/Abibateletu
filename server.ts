@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { DEFAULT_CMS_STATE } from './src/data/defaultCmsState.ts';
 import type { CmsState, ContactInquiry } from './src/types/cms.ts';
 
@@ -19,12 +20,22 @@ const PORT = Number(process.env.PORT || 3000);
 const DATA_DIR = path.resolve(__dirname, '.data');
 const DATA_FILE = path.join(DATA_DIR, 'abibat-cms.json');
 
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'eletuabibat12@gmail.com';
-const ADMIN_PASSCODE = process.env.ADMIN_PASSCODE || 'abibat-studio-2026';
-const SESSION_SECRET =
-  process.env.SESSION_SECRET ||
-  process.env.CLOUDINARY_API_SECRET ||
-  'abibat-editorial-studio-secret';
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '';
+const SUPABASE_KEY =
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.VITE_SUPABASE_ANON_KEY ||
+  process.env.SUPABASE_ANON_KEY ||
+  '';
+
+const serverSupabase: SupabaseClient | null =
+  SUPABASE_URL && SUPABASE_KEY
+    ? createClient(SUPABASE_URL, SUPABASE_KEY, {
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+        },
+      })
+    : null;
 
 function ensureDataStore(): CmsState {
   if (!fs.existsSync(DATA_DIR)) {
@@ -95,41 +106,41 @@ function ensureDataStore(): CmsState {
         : parsed.pageHeroes?.contact || DEFAULT_CMS_STATE.pageHeroes.contact;
     const migratedProjects = Array.isArray(parsed.portfolioProjects)
       ? parsed.portfolioProjects.map((p) => ({
-          ...p,
-          photographer: p.photographer ?? '',
-          externalLink: p.externalLink ?? '',
-          isPublished: p.isPublished ?? true,
-          category:
-            (p.category as string) === 'Editorial'
-              ? ('Editorials' as const)
-              : (p.category as string) === 'Commercial'
-                ? ('Campaigns' as const)
-                : p.category,
-        }))
+        ...p,
+        photographer: p.photographer ?? '',
+        externalLink: p.externalLink ?? '',
+        isPublished: p.isPublished ?? true,
+        category:
+          (p.category as string) === 'Editorial'
+            ? ('Editorials' as const)
+            : (p.category as string) === 'Commercial'
+              ? ('Campaigns' as const)
+              : p.category,
+      }))
       : DEFAULT_CMS_STATE.portfolioProjects;
     const migratedAgencies = Array.isArray(parsed.representationAgencies)
       ? parsed.representationAgencies
-          .filter((a) => !(a.isPlaceholder && !a.agencyName?.trim()))
-          .map((a, idx) => ({
-            ...a,
-            description: a.description ?? '',
-            logoAssetId: a.logoAssetId ?? '',
-            photoAssetId: a.photoAssetId ?? '',
-            specialties: Array.isArray(a.specialties) ? a.specialties : [],
-            isActive: a.isActive ?? true,
-            sortOrder: typeof a.sortOrder === 'number' ? a.sortOrder : idx,
-          }))
+        .filter((a) => !(a.isPlaceholder && !a.agencyName?.trim()))
+        .map((a, idx) => ({
+          ...a,
+          description: a.description ?? '',
+          logoAssetId: a.logoAssetId ?? '',
+          photoAssetId: a.photoAssetId ?? '',
+          specialties: Array.isArray(a.specialties) ? a.specialties : [],
+          isActive: a.isActive ?? true,
+          sortOrder: typeof a.sortOrder === 'number' ? a.sortOrder : idx,
+        }))
       : DEFAULT_CMS_STATE.representationAgencies;
     const migratedInquiries = Array.isArray(parsed.inquiries)
       ? parsed.inquiries.map((inq) => ({
-          ...inq,
-          status:
-            (inq.status as string) === 'reviewed'
-              ? ('read' as const)
-              : (inq.status as string) === 'responded'
-                ? ('replied' as const)
-                : inq.status,
-        }))
+        ...inq,
+        status:
+          (inq.status as string) === 'reviewed'
+            ? ('read' as const)
+            : (inq.status as string) === 'responded'
+              ? ('replied' as const)
+              : inq.status,
+      }))
       : [];
     const migratedSiteSettings = {
       ...DEFAULT_CMS_STATE.siteSettings,
@@ -161,17 +172,17 @@ function ensureDataStore(): CmsState {
       ? DEFAULT_CMS_STATE.experienceEntries
       : Array.isArray(parsed.experienceEntries)
         ? parsed.experienceEntries.map((e, idx) => ({
-            ...e,
-            season: e.season ?? '',
-            category: mapExperienceCategory(e.category),
-            description: e.description ?? e.notes ?? '',
-            coverAssetId: e.coverAssetId ?? '',
-            galleryAssetIds: Array.isArray(e.galleryAssetIds) ? e.galleryAssetIds : [],
-            externalLink: e.externalLink ?? '',
-            featured: e.featured ?? idx < 3,
-            isPublished: e.isPublished ?? true,
-            sortOrder: typeof e.sortOrder === 'number' ? e.sortOrder : idx,
-          }))
+          ...e,
+          season: e.season ?? '',
+          category: mapExperienceCategory(e.category),
+          description: e.description ?? e.notes ?? '',
+          coverAssetId: e.coverAssetId ?? '',
+          galleryAssetIds: Array.isArray(e.galleryAssetIds) ? e.galleryAssetIds : [],
+          externalLink: e.externalLink ?? '',
+          featured: e.featured ?? idx < 3,
+          isPublished: e.isPublished ?? true,
+          sortOrder: typeof e.sortOrder === 'number' ? e.sortOrder : idx,
+        }))
         : DEFAULT_CMS_STATE.experienceEntries;
     return {
       ...DEFAULT_CMS_STATE,
@@ -221,56 +232,47 @@ function saveDataStore(state: CmsState): CmsState {
   return nextState;
 }
 
-function signSessionToken(email: string): string {
-  const payload = Buffer.from(
-    JSON.stringify({ email, role: 'admin', exp: Date.now() + 1000 * 60 * 60 * 24 * 7 })
-  ).toString('base64url');
-  const sig = crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('base64url');
-  return `${payload}.${sig}`;
-}
+async function verifyAdminBearerToken(
+  token: string | undefined
+): Promise<{ email: string; id: string } | null> {
+  if (!token || !serverSupabase) return null;
 
-function verifySessionToken(token: string | undefined): { email: string; role: string } | null {
-  if (!token) return null;
-  const parts = token.split('.');
-  
-  // Support standard 3-part Supabase Auth JWTs
-  if (parts.length === 3) {
-    try {
-      const decoded = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf-8')) as {
-        email?: string;
-        role?: string;
-        exp?: number;
-      };
-      if (decoded.exp && decoded.exp * 1000 < Date.now()) return null;
-      if (
-        (decoded.email && decoded.email.toLowerCase() === ADMIN_EMAIL.toLowerCase()) ||
-        decoded.role === 'admin' ||
-        decoded.role === 'authenticated'
-      ) {
-        return { email: decoded.email || ADMIN_EMAIL, role: 'admin' };
-      }
-    } catch {
+  try {
+    // 1. Cryptographically verify the JWT against Supabase Auth
+    const { data: authData, error: authErr } = await serverSupabase.auth.getUser(token);
+    if (authErr || !authData?.user) {
       return null;
     }
-  }
 
-  // Support 2-part local HMAC session tokens
-  if (parts.length !== 2) return null;
-  const [payload, sig] = parts;
-  const expectedSig = crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('base64url');
-  if (sig.length !== expectedSig.length) return null;
-  if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expectedSig))) {
+    const user = authData.user;
+
+    // 2. Query public.admin_profiles for authorized administrator role
+    const { data: profile, error: profileErr } = await serverSupabase
+      .from('admin_profiles')
+      .select('id, role, email')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if (!profileErr && profile) {
+      if (profile.role === 'admin' || profile.role === 'super_admin') {
+        return { email: user.email || profile.email, id: user.id };
+      }
+      console.warn(
+        `[Security Alert] Non-admin user "${user.email}" (${user.id}) attempted privileged admin operation.`
+      );
+      return null;
+    }
+
+    // If admin_profiles table has not been created yet in Supabase (PGRST205), safely check designated admin email
+    if (profileErr && profileErr.code === 'PGRST205') {
+      if (user.email?.toLowerCase() === 'eletuabibat12@gmail.com') {
+        return { email: user.email, id: user.id };
+      }
+    }
+
     return null;
-  }
-  try {
-    const decoded = JSON.parse(Buffer.from(payload, 'base64url').toString('utf-8')) as {
-      email: string;
-      role: string;
-      exp: number;
-    };
-    if (decoded.exp < Date.now()) return null;
-    return { email: decoded.email, role: decoded.role };
-  } catch {
+  } catch (err) {
+    console.error('[Security] Failed to verify Supabase bearer token:', err);
     return null;
   }
 }
@@ -281,13 +283,20 @@ function extractBearerToken(req: express.Request): string | undefined {
   return authHeader.slice(7).trim();
 }
 
-function requireAdmin(req: express.Request, res: express.Response, next: express.NextFunction) {
+async function requireAdmin(req: express.Request, res: express.Response, next: express.NextFunction) {
   const token = extractBearerToken(req);
-  const session = verifySessionToken(token);
-  if (!session) {
-    res.status(401).json({ error: 'Authentication required' });
+  if (!token) {
+    res.status(401).json({ error: 'Authentication required. No bearer token provided.' });
     return;
   }
+
+  const admin = await verifyAdminBearerToken(token);
+  if (!admin) {
+    res.status(403).json({ error: 'Access denied: Valid administrator credentials required.' });
+    return;
+  }
+
+  (req as unknown as { adminUser?: { email: string; id: string } }).adminUser = admin;
   next();
 }
 
@@ -414,36 +423,11 @@ async function startServer() {
     });
   });
 
-  app.post('/api/auth/login', (req, res) => {
-    const { email, password } = req.body ?? {};
-    if (
-      typeof email === 'string' &&
-      typeof password === 'string' &&
-      email.trim().toLowerCase() === ADMIN_EMAIL.toLowerCase() &&
-      password === ADMIN_PASSCODE
-    ) {
-      const token = signSessionToken(email.trim());
-      res.json({ token, user: { email: email.trim(), role: 'admin' } });
-      return;
-    }
-    res.status(401).json({ error: 'Invalid admin credentials' });
-  });
-
-  app.get('/api/auth/verify', (req, res) => {
-    const token = extractBearerToken(req);
-    const session = verifySessionToken(token);
-    if (!session) {
-      res.status(401).json({ authenticated: false });
-      return;
-    }
-    res.json({ authenticated: true, user: session });
-  });
-
-  app.get('/api/content', (req, res) => {
+  app.get('/api/content', async (req, res) => {
     const state = ensureDataStore();
     const token = extractBearerToken(req);
-    const session = verifySessionToken(token);
-    if (session) {
+    const admin = await verifyAdminBearerToken(token);
+    if (admin) {
       res.json(state);
       return;
     }
