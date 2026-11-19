@@ -69,10 +69,13 @@ export function CmsProvider({ children }: { children: React.ReactNode }) {
   const [isAdmin, setIsAdmin] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
 
+  const initialCloudName =
+    (import.meta.env.VITE_CLOUDINARY_CLOUD_NAME as string | undefined)?.trim() || '';
+
   const [configStatus, setConfigStatus] = useState<ConfigStatus>({
     supabaseConfigured: isSupabaseEnabled,
-    cloudinaryConfigured: false,
-    cloudinaryCloudName: '',
+    cloudinaryConfigured: Boolean(initialCloudName),
+    cloudinaryCloudName: initialCloudName,
   });
 
   const refreshState = useCallback(async () => {
@@ -105,7 +108,11 @@ export function CmsProvider({ children }: { children: React.ReactNode }) {
 
       if (configRes && configRes.ok) {
         const cfg = (await configRes.json()) as ConfigStatus;
-        setConfigStatus(cfg);
+        setConfigStatus((prev) => ({
+          supabaseConfigured: typeof cfg.supabaseConfigured === 'boolean' ? cfg.supabaseConfigured : prev.supabaseConfigured,
+          cloudinaryConfigured: typeof cfg.cloudinaryConfigured === 'boolean' ? cfg.cloudinaryConfigured : prev.cloudinaryConfigured,
+          cloudinaryCloudName: cfg.cloudinaryCloudName || prev.cloudinaryCloudName,
+        }));
       }
     } catch {
       // Gracefully retain current / default state

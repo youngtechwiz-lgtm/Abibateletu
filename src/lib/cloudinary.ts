@@ -60,14 +60,24 @@ export async function requestCloudinarySignature(
   tags: string[],
   adminToken: string | null
 ): Promise<SignedUploadParams> {
+  let token = adminToken;
+  if (!token && isSupabaseEnabled && supabase) {
+    const { data: sessionData } = await supabase.auth.getSession();
+    token = sessionData.session?.access_token || null;
+  }
+
   if (isSupabaseEnabled && supabase) {
     const { data: sessionData } = await supabase.auth.getSession();
     if (sessionData.session) {
-      const { data, error } = await supabase.functions.invoke('cloudinary-sign', {
-        body: { folder, tags },
-      });
-      if (!error && data?.signature) {
-        return data as SignedUploadParams;
+      try {
+        const { data, error } = await supabase.functions.invoke('cloudinary-sign', {
+          body: { folder, tags },
+        });
+        if (!error && data?.signature) {
+          return data as SignedUploadParams;
+        }
+      } catch {
+        // Fall back gracefully to Vercel API signing route
       }
     }
   }
@@ -76,7 +86,7 @@ export async function requestCloudinarySignature(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...(adminToken ? { Authorization: `Bearer ${adminToken}` } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: JSON.stringify({ folder, tags }),
   });
