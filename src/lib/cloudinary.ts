@@ -26,24 +26,42 @@ export function getOptimizedCloudinaryUrl(
   preset: CloudinaryPreset = 'portfolio-card'
 ): string {
   if (!asset || !asset.secureUrl) return '';
-  const url = asset.secureUrl;
+  const url = asset.secureUrl.trim();
+  if (!url) return '';
 
-  // Apply Cloudinary on-the-fly transformations when served from res.cloudinary.com
-  if (url.includes('res.cloudinary.com') && url.includes('/upload/')) {
-    const transform = PRESET_TRANSFORMS[preset];
-    // If the transformation is already in place, return as is
-    if (url.includes(`/upload/${transform}/`)) {
-      return url;
-    }
-    // If there is an existing transformation segment right after /upload/, replace it
-    const existingTransformRegex = /\/upload\/(?:[a-z0-9_:,]+)\/(v\d+\/.*)$/;
-    if (existingTransformRegex.test(url)) {
-      return url.replace(existingTransformRegex, `/upload/${transform}/$1`);
-    }
-    return url.replace('/upload/', `/upload/${transform}/`);
+  // Only apply transformations to Cloudinary delivery URLs
+  if (!url.includes('res.cloudinary.com') || !url.includes('/upload/')) {
+    return url;
   }
 
-  return url;
+  const transform = PRESET_TRANSFORMS[preset] || PRESET_TRANSFORMS['portfolio-card'];
+
+  // If the transformation is already in place, return as is
+  if (url.includes(`/upload/${transform}/`)) {
+    return url;
+  }
+
+  const uploadIndex = url.indexOf('/upload/');
+  if (uploadIndex === -1) return url;
+
+  const prefix = url.slice(0, uploadIndex + 8);
+  const remainder = url.slice(uploadIndex + 8);
+
+  const versionMatch = remainder.match(/(v\d+\/.*)$/);
+  if (versionMatch) {
+    return `${prefix}${transform}/${versionMatch[1]}`;
+  }
+
+  const slashIndex = remainder.indexOf('/');
+  if (
+    slashIndex !== -1 &&
+    (remainder.includes(',') || remainder.slice(0, slashIndex).includes('_') || remainder.slice(0, slashIndex).includes(':'))
+  ) {
+    const publicPath = remainder.slice(slashIndex + 1);
+    return `${prefix}${transform}/${publicPath}`;
+  }
+
+  return `${prefix}${transform}/${remainder}`;
 }
 
 export interface SignedUploadParams {

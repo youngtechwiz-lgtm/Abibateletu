@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { getOptimizedCloudinaryUrl, type CloudinaryPreset } from '../lib/cloudinary.ts';
 import type { MediaAsset } from '../types/cms.ts';
 
@@ -33,20 +33,37 @@ export function EditorialMediaFrame({
   darkSurface = true,
   grayscale = false,
 }: EditorialMediaFrameProps) {
+  const [useRawFallback, setUseRawFallback] = useState(false);
   const [failed, setFailed] = useState(false);
 
-  const resolvedUrl = asset && !failed ? getOptimizedCloudinaryUrl(asset, preset) : '';
-  const hasRealImage = Boolean(resolvedUrl);
+  useEffect(() => {
+    setUseRawFallback(false);
+    setFailed(false);
+  }, [asset?.id, asset?.secureUrl, preset]);
+
+  const rawUrl = asset?.secureUrl?.trim() || '';
+  const optimizedUrl = asset ? getOptimizedCloudinaryUrl(asset, preset) : '';
+  const activeUrl = failed ? '' : useRawFallback ? rawUrl : optimizedUrl || rawUrl;
+  const hasRealImage = Boolean(activeUrl);
+
+  const handleError = () => {
+    // If the optimized URL failed and differs from the raw URL, try falling back to raw secureUrl
+    if (!useRawFallback && rawUrl && optimizedUrl && optimizedUrl !== rawUrl) {
+      setUseRawFallback(true);
+    } else {
+      setFailed(true);
+    }
+  };
 
   if (hasRealImage && asset) {
     return (
       <div className={`relative overflow-hidden bg-[#141414] ${className}`}>
         <img
-          src={resolvedUrl}
+          src={activeUrl}
           alt={alt || asset.altText || asset.assetName}
           referrerPolicy="no-referrer"
           loading={priority ? 'eager' : 'lazy'}
-          onError={() => setFailed(true)}
+          onError={handleError}
           className={`${imgClassName} ${grayscale ? 'grayscale contrast-110' : ''} transition-transform duration-700 ease-out`}
         />
       </div>

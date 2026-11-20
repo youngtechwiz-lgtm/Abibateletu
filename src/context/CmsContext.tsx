@@ -99,11 +99,27 @@ export function CmsProvider({ children }: { children: React.ReactNode }) {
         fetch('/api/config/status').catch(() => null),
       ]);
 
-      if (supabaseLoadedState) {
-        setState(supabaseLoadedState);
-      } else if (contentRes && contentRes.ok) {
-        const data = (await contentRes.json()) as CmsState;
-        setState(data);
+      let backendState: CmsState | null = null;
+      if (contentRes && contentRes.ok) {
+        try {
+          backendState = (await contentRes.json()) as CmsState;
+        } catch {}
+      }
+
+      let localSavedState: CmsState | null = null;
+      try {
+        const rawLocal = localStorage.getItem('abibat_cms_state_snapshot');
+        if (rawLocal) {
+          localSavedState = JSON.parse(rawLocal) as CmsState;
+        }
+      } catch {}
+
+      const candidateState = supabaseLoadedState || backendState || localSavedState;
+      if (candidateState) {
+        setState(candidateState);
+        try {
+          localStorage.setItem('abibat_cms_state_snapshot', JSON.stringify(candidateState));
+        } catch {}
       }
 
       if (configRes && configRes.ok) {
@@ -324,6 +340,9 @@ export function CmsProvider({ children }: { children: React.ReactNode }) {
       let nextSnapshot: CmsState | null = null;
       setState((prev) => {
         nextSnapshot = updater(prev);
+        try {
+          localStorage.setItem('abibat_cms_state_snapshot', JSON.stringify(nextSnapshot));
+        } catch {}
         return nextSnapshot;
       });
 
@@ -332,7 +351,7 @@ export function CmsProvider({ children }: { children: React.ReactNode }) {
       try {
         const token = await getValidAuthToken();
 
-        // Synchronize with Express server store
+        // Synchronize with Express server store / Vercel API
         const serverSyncPromise = fetch('/api/content', {
           method: 'PUT',
           headers: {
@@ -355,6 +374,9 @@ export function CmsProvider({ children }: { children: React.ReactNode }) {
         if (serverRes && serverRes.ok) {
           const saved = (await serverRes.json()) as CmsState;
           setState(saved);
+          try {
+            localStorage.setItem('abibat_cms_state_snapshot', JSON.stringify(saved));
+          } catch {}
           if (typeof BroadcastChannel !== 'undefined') {
             const channel = new BroadcastChannel('abibat_cms_sync');
             channel.postMessage({ type: 'CMS_UPDATED', state: saved });
@@ -411,14 +433,20 @@ export function CmsProvider({ children }: { children: React.ReactNode }) {
         await deleteMediaAssetFromSupabase(supabase, assetId);
       }
 
-      const data = await res.json();
-      if (data.state) {
-        setState(data.state as CmsState);
-        if (typeof BroadcastChannel !== 'undefined') {
-          const channel = new BroadcastChannel('abibat_cms_sync');
-          channel.postMessage({ type: 'CMS_UPDATED', state: data.state });
-          channel.close();
-        }
+      const data = await res.json().catch(() => ({}));
+      setState((prev) => {
+        const nextMedia = prev.mediaAssets.filter((a) => a.id !== assetId);
+        const updated = data.state ? (data.state as CmsState) : { ...prev, mediaAssets: nextMedia };
+        try {
+          localStorage.setItem('abibat_cms_state_snapshot', JSON.stringify(updated));
+        } catch {}
+        return updated;
+      });
+
+      if (typeof BroadcastChannel !== 'undefined') {
+        const channel = new BroadcastChannel('abibat_cms_sync');
+        channel.postMessage({ type: 'CMS_UPDATED', state: state });
+        channel.close();
       }
       return { deleted: true };
     },

@@ -182,11 +182,21 @@ export async function fetchCmsStateFromSupabase(
       supabase.from('admin_activity').select('*').order('created_at', { ascending: false }).limit(25),
     ]);
 
-    // Build mediaAssets
-    const mediaAssets: MediaAsset[] =
-      mediaRes.data && mediaRes.data.length > 0
-        ? mediaRes.data.map(mapDbMediaAsset)
-        : DEFAULT_CMS_STATE.mediaAssets;
+    // If database queries return errors indicating tables are unmigrated or unauthorized, return null
+    // to allow fallback to the persistent store (server / localStorage) without overwriting state with blanks.
+    const coreErrors = [mediaRes.error, heroesRes.error, homepageRes.error, portfolioRes.error].filter(Boolean);
+    if (coreErrors.length >= 3) {
+      console.warn('Supabase tables unavailable or unmigrated; falling back to persistent state store.');
+      return null;
+    }
+
+    // Build mediaAssets: preserve default placeholder assets for unassigned slots while prioritizing live DB records
+    const dbAssets = (mediaRes.data || []).map(mapDbMediaAsset);
+    const dbAssetIds = new Set(dbAssets.map((a) => a.id));
+    const mediaAssets: MediaAsset[] = [
+      ...dbAssets,
+      ...DEFAULT_CMS_STATE.mediaAssets.filter((def) => !dbAssetIds.has(def.id)),
+    ];
 
     // Build pageHeroes
     const pageHeroes = { ...DEFAULT_CMS_STATE.pageHeroes };
@@ -816,6 +826,31 @@ export async function saveCmsStateToSupabase(
         is_placeholder: ag.isPlaceholder,
       })
     );
+  }
+
+  // 14. Media assets (persist all active Cloudinary and manual assets)
+  for (const asset of state.mediaAssets) {
+    if (!asset.isPlaceholder && asset.secureUrl) {
+      promises.push(
+        supabase.from('media_assets').upsert({
+          id: asset.id,
+          asset_name: asset.assetName,
+          cloudinary_public_id: asset.cloudinaryPublicId,
+          cloudinary_asset_id: asset.cloudinaryAssetId || null,
+          secure_url: asset.secureUrl,
+          resource_type: asset.resourceType || 'image',
+          format: asset.format || 'jpg',
+          width: asset.width || 0,
+          height: asset.height || 0,
+          file_size: asset.fileSize || 0,
+          alt_text: asset.altText || '',
+          folder: asset.folder || 'abibat/general',
+          tags: asset.tags || [],
+          is_placeholder: Boolean(asset.isPlaceholder),
+          updated_at: new Date().toISOString(),
+        })
+      );
+    }
   }
 
   await Promise.allSettled(promises);

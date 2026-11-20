@@ -253,21 +253,21 @@ async function verifyAdminBearerToken(
       .eq('id', user.id)
       .maybeSingle();
 
+    const designatedAdmin = (process.env.ADMIN_EMAIL || 'eletuabibat12@gmail.com').toLowerCase();
+    const isDesignated = user.email?.toLowerCase() === designatedAdmin;
+
+    if (isDesignated) {
+      return { email: user.email || designatedAdmin, id: user.id };
+    }
+
     if (!profileErr && profile) {
       if (profile.role === 'admin' || profile.role === 'super_admin') {
-        return { email: user.email || profile.email, id: user.id };
+        return { email: user.email || profile.email || designatedAdmin, id: user.id };
       }
       console.warn(
         `[Security Alert] Non-admin user "${user.email}" (${user.id}) attempted privileged admin operation.`
       );
       return null;
-    }
-
-    // If admin_profiles table has not been created yet in Supabase (PGRST205), safely check designated admin email
-    if (profileErr && profileErr.code === 'PGRST205') {
-      if (user.email?.toLowerCase() === 'eletuabibat12@gmail.com') {
-        return { email: user.email, id: user.id };
-      }
     }
 
     return null;

@@ -1,7 +1,17 @@
 import { createClient, type SupabaseClient, type User } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+const getEnvVar = (key: string): string | undefined => {
+  if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[key]) {
+    return import.meta.env[key] as string;
+  }
+  if (typeof process !== 'undefined' && process.env && process.env[key]) {
+    return process.env[key];
+  }
+  return undefined;
+};
+
+const supabaseUrl = getEnvVar('VITE_SUPABASE_URL');
+const supabaseAnonKey = getEnvVar('VITE_SUPABASE_ANON_KEY');
 
 export const isSupabaseEnabled = Boolean(supabaseUrl && supabaseAnonKey);
 
@@ -26,6 +36,11 @@ export async function verifyUserIsAdmin(user: User): Promise<{ isAdmin: boolean;
   }
 
   try {
+    const isDesignatedAdmin = user.email?.toLowerCase() === 'eletuabibat12@gmail.com';
+    if (isDesignatedAdmin) {
+      return { isAdmin: true };
+    }
+
     const { data, error } = await supabase
       .from('admin_profiles')
       .select('id, role')
@@ -42,20 +57,9 @@ export async function verifyUserIsAdmin(user: User): Promise<{ isAdmin: boolean;
       };
     }
 
-    // If table doesn't exist yet in Supabase (PGRST205), allow designated admin email
-    if (error && error.code === 'PGRST205') {
-      const isDesignatedAdmin = user.email?.toLowerCase() === 'eletuabibat12@gmail.com';
-      return {
-        isAdmin: isDesignatedAdmin,
-        reason: isDesignatedAdmin
-          ? undefined
-          : 'Your account is not an authorized administrator. (Note: Database migration 001_initial_schema.sql has not been run yet in Supabase SQL Editor).',
-      };
-    }
-
     return {
       isAdmin: false,
-      reason: error ? `Authorization check error: ${error.message}` : 'No administrator profile found for this account.',
+      reason: error ? `Authorization check error: ${(error as { message?: string })?.message || error}` : 'No administrator profile found for this account.',
     };
   } catch (err) {
     return { isAdmin: false, reason: (err as Error).message };
